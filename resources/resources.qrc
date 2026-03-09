@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/themes">
+        <file alias="dark.qss">../src/ui/theme/themes/dark.qss</file>
+        <file alias="light.qss">../src/ui/theme/themes/light.qss</file>
+    </qresource>
+
+    <!-- Icons are added here as SVGs are created (Phase 4) -->
+    <qresource prefix="/icons">
+        <file alias="logo.png">../logo.png</file>
+    </qresource>
+
+    <!-- Cursors -->
+    <qresource prefix="/cursors">
+    </qresource>
+</RCC>

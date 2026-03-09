@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Zyri
+Comment=Local-only graphics editor
+Exec=zyri %F
+Icon=zyri
+Terminal=false
+Type=Application
+Categories=Graphics;2DGraphics;RasterGraphics;
+MimeType=application/x-zyri;image/png;image/jpeg;application/pdf;
+StartupNotify=true

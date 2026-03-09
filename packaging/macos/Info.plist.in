@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Zyri</string>
+
+    <key>CFBundleExecutable</key>
+    <string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.zyri.app</string>
+
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+
+    <key>CFBundleName</key>
+    <string>Zyri</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+
+    <key>CFBundleVersion</key>
+    <string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
+
+    <!-- Minimum macOS version: 13 Ventura (required for Qt 6.5+) -->
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+
+    <!-- Declare supported document types -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Zyri Document</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>zyri</string>
+            </array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>PNG Image</string>
+            <key>CFBundleTypeExtensions</key>
+            <array><string>png</string></array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>JPEG Image</string>
+            <key>CFBundleTypeExtensions</key>
+            <array><string>jpg</string><string>jpeg</string></array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>PDF Document</string>
+            <key>CFBundleTypeExtensions</key>
+            <array><string>pdf</string></array>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+        </dict>
+    </array>
+
+    <!-- Retina support -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Trackpad / touch -->
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+
+    <!-- Human-readable purpose strings for permissions -->
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Zyri needs access to open and save image files from your Desktop.</string>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Zyri needs access to open and save image files from your Documents folder.</string>
+
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Zyri needs access to open and save image files from your Downloads folder.</string>
+</dict>
+</plist>

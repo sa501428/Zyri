@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Enable App Sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Read/write access to files the user explicitly opens or saves -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Security-scoped bookmarks: required to reopen files between sessions
+         without showing the file picker every launch -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
+    <!-- Allow incoming (read) and outgoing (write) network connections
+         ONLY if needed in the future. Left false for local-only v1. -->
+    <key>com.apple.security.network.client</key>
+    <false/>
+
+    <key>com.apple.security.network.server</key>
+    <false/>
+
+    <!-- Printing support (for PDF export via QPrinter) -->
+    <key>com.apple.security.print</key>
+    <true/>
+</dict>
+</plist>

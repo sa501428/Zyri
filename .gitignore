@@ -1,0 +1,60 @@
+# ── Build output ──────────────────────────────────────────────────────────────
+build/
+build-*/
+cmake-build-*/
+*.app/
+*.dmg
+
+# ── CMake ─────────────────────────────────────────────────────────────────────
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+CPackConfig.cmake
+CPackSourceConfig.cmake
+_CPack_Packages/
+
+# ── Compiler artifacts ────────────────────────────────────────────────────────
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# ── Qt MOC / RCC / UIC ────────────────────────────────────────────────────────
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.moc
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+*.xcuserdata
+*.xcworkspace
+*.xcodeproj
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+*.suo
+*.user
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.kdev4
+.clangd/
+compile_commands.json
+
+# ── Clang tooling ─────────────────────────────────────────────────────────────
+.clang-tidy-cache/
+
+# ── Conan / vcpkg ─────────────────────────────────────────────────────────────
+conaninfo.txt
+conanfile.lock
+vcpkg_installed/

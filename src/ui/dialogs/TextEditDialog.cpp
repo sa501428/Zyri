@@ -1,0 +1,1 @@
+#include "TextEditDialog.h"
