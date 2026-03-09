@@ -1,11 +1,13 @@
 #include <QApplication>
 #include <QIcon>
 #include <QMainWindow>
-#include <QLabel>
 #include <QStatusBar>
 #include <QMenuBar>
-#include <QVBoxLayout>
 #include <QSurfaceFormat>
+
+#include "canvas/CanvasViewport.h"
+#include "core/Document.h"
+#include "core/RasterLayer.h"
 
 int main(int argc, char* argv[])
 {
@@ -23,40 +25,44 @@ int main(int argc, char* argv[])
     app.setOrganizationDomain(QStringLiteral("zyri.app"));
     app.setWindowIcon(QIcon(QStringLiteral(":/icons/logo.png")));
 
-    // ── Main window ───────────────────────────────────────────────────────────
+    // ── Default document (1920x1080, one blank raster layer) ------------------
+    auto* doc   = new Zyri::Document(QSize(1920, 1080), 96, Qt::transparent);
+    auto  layer = std::make_unique<Zyri::RasterLayer>(QStringLiteral("Background"));
+    doc->layers()->addLayer(std::move(layer));
+
+    // ── Canvas viewport -------------------------------------------------------
+    auto* viewport = new Zyri::CanvasViewport;
+    viewport->setDocument(doc);
+
+    // ── Main window -----------------------------------------------------------
     QMainWindow win;
     win.setWindowTitle(QStringLiteral("Zyri"));
     win.resize(1400, 900);
+    win.setCentralWidget(viewport);
 
-    // Placeholder central widget — replaced by CanvasViewport in Phase 2.
-    auto* central = new QWidget(&win);
-    auto* layout  = new QVBoxLayout(central);
-    layout->setContentsMargins(0, 0, 0, 0);
-
-    auto* placeholder = new QLabel(
-        QStringLiteral("<center><h2>Zyri</h2>"
-                       "<p style='color:#888'>Canvas will appear here in Phase 2.</p></center>"),
-        central);
-    placeholder->setAlignment(Qt::AlignCenter);
-    layout->addWidget(placeholder);
-    win.setCentralWidget(central);
-
-    // ── Menu bar ──────────────────────────────────────────────────────────────
+    // ── Menu bar --------------------------------------------------------------
     auto* fileMenu = win.menuBar()->addMenu(QStringLiteral("&File"));
-    fileMenu->addAction(QStringLiteral("&New"),       QKeySequence::New);
-    fileMenu->addAction(QStringLiteral("&Open…"),     QKeySequence::Open);
+    fileMenu->addAction(QStringLiteral("&New"),      QKeySequence::New);
+    fileMenu->addAction(QStringLiteral("&Open..."),  QKeySequence::Open);
     fileMenu->addSeparator();
-    fileMenu->addAction(QStringLiteral("&Save"),      QKeySequence::Save);
-    fileMenu->addAction(QStringLiteral("Save &As…"),  QKeySequence::SaveAs);
+    fileMenu->addAction(QStringLiteral("&Save"),     QKeySequence::Save);
+    fileMenu->addAction(QStringLiteral("Save &As..."), QKeySequence::SaveAs);
     fileMenu->addSeparator();
-    fileMenu->addAction(QStringLiteral("&Quit"),      QKeySequence::Quit,
+    fileMenu->addAction(QStringLiteral("&Quit"),     QKeySequence::Quit,
                         &app, &QApplication::quit);
 
     auto* editMenu = win.menuBar()->addMenu(QStringLiteral("&Edit"));
-    editMenu->addAction(QStringLiteral("&Undo"),  QKeySequence::Undo);
-    editMenu->addAction(QStringLiteral("&Redo"),  QKeySequence::Redo);
+    editMenu->addAction(QStringLiteral("&Undo"), QKeySequence::Undo);
+    editMenu->addAction(QStringLiteral("&Redo"), QKeySequence::Redo);
 
-    // ── Status bar ────────────────────────────────────────────────────────────
+    // ── Status bar: live canvas cursor coordinates ----------------------------
+    QObject::connect(viewport, &Zyri::CanvasViewport::canvasPosChanged,
+                     [&win](const QPointF& p) {
+                         win.statusBar()->showMessage(
+                             QStringLiteral("X: %1   Y: %2")
+                                 .arg(qRound(p.x()))
+                                 .arg(qRound(p.y())));
+                     });
     win.statusBar()->showMessage(QStringLiteral("Ready"));
 
     win.show();
