@@ -1,60 +1,87 @@
-# Zyri — Tiled Rendering System
+# Zyri tile and coordinate design
 
-## Why Tiles?
+Implementation update: see [implementation status](implementation-status.md) for delivered behavior and departures from this design. The original planning text below is retained as context.
 
-A 4K canvas (3840×2160) at 2× Retina = **8K physical pixels** to push per frame.
-Redrawing the full canvas on every brush stroke event would make the UI choke on
-even a fast Mac. The tiled system ensures **only modified regions are re-rasterized
-and re-uploaded to the GPU**.
+Status: proposed replacement for the prototype. See the [audit](code-audit.md) for current defects.
 
-## Tile Size: 256×256
+## Coordinate contract
 
-- 256×256 ARGB32_Premultiplied = **256 KB per tile** (uncompressed).
-- A 4K canvas has ~255 tiles.
-- 64×64 tiles → too many GL draw calls (4080 quads per layer at 4K).
-- 512×512 tiles → dirtying too much area per brush stamp.
-- **256 is the Krita/Photoshop industry standard.**
+Keep three coordinate spaces explicit:
 
-## Tile Coordinate System
+| Space | Unit | Uses |
+| --- | --- | --- |
+| Document | Image pixel, fractional for input and vector geometry | Painting, objects, selection, export |
+| View | Device-independent widget unit | Pointer events, pan, zoom, overlays |
+| Framebuffer | Physical output pixel | GPU viewport and render targets |
 
-Canvas pixel `(x, y)` maps to tile `(tx, ty)` as:
-```
-tx = floor(x / 256)
-ty = floor(y / 256)
-```
+Define the view transform as:
 
-Within a tile, the local pixel is:
-```
-lx = x - tx * 256
-ly = y - ty * 256
-```
+`viewPoint = viewportCenter + zoom × rotation × (documentPoint - documentCenter)`
 
-## RasterLayer Tile Storage
+DPR is absent from that mapping. At the rendering boundary, convert view coordinates to framebuffer pixels using DPR exactly once. Pointer-to-document conversion uses the inverse view transform.
 
-`RasterLayer` stores tiles as `QHash<TileKey, QImage>`.
-- **Missing tile** = fully transparent (avoids allocating tiles for empty areas).
-- **Copy-on-write before mutation**: always call `layer->tileAt()` (returns a
-  detached copy), mutate it, then call `layer->setTile()`.
+At 100%, one document pixel occupies one logical widget unit. Provide a separate actual-pixel view command if one document pixel per physical display pixel is desired. PPI affects physical output size, not zoom or stored image dimensions.
 
-## Dirty Region Updates
+To zoom around a pointer, compute the document point under it, change zoom, then solve for the new center that preserves that point. Pan uses the inverse rotation and zoom. Define signs once and test them.
 
-When a brush stamp is applied:
-1. `PaintEngine::stampAt()` calls `TileCache::markDirty(tx, ty)` for each
-   intersected tile.
-2. `CanvasViewport::invalidateTile()` converts the tile to a screen rect via
-   `ViewTransform` and calls `QOpenGLWidget::update(screenRect)`.
-3. Qt restricts the GL repaint scissor to that rect — **tiles outside the
-   dirty region are not redrawn**.
+Test round trips, cursor anchoring, panning direction, viewport edges, rotation, and DPR values 1, 1.25, 1.5, and 2. A 4096×4096 document stays 4096×4096 on a Retina display.
 
-## GPU Texture Upload
+## Storage contract
 
-`TileCache::uploadTile()` calls `glTexImage2D` with `GL_BGRA` /
-`GL_UNSIGNED_INT_8_8_8_8_REV` to match Qt's ARGB32_Premultiplied memory layout
-on little-endian systems. This avoids a byte-swap copy.
+Start with 256×256 tiles as a provisional default. Compare 128, 256, and 512 in benchmarks before freezing file-format assumptions. Store tile dimensions in the native format.
 
-## Retina / HiDPI
+A tile has an explicit pixel format, immutable content identity, and revision association. Use canonical RGBA8 premultiplied storage for the first release; CPU adapters may convert internal representations without changing the document contract.
 
-`ViewTransform` stores `devicePixelRatio` (DPR = 2.0 on Retina).
-- Canvas coordinates are **logical pixels** throughout the codebase.
-- The GL viewport and tile upload are in **physical pixels** (logical × DPR).
-- `ViewTransform::canvasToScreen()` multiplies by `zoom × DPR`.
+Missing tiles represent fully transparent pixels. Reads return shared immutable storage or a transparent sentinel, without allocating or copying. First mutation within a transaction makes a writable copy; subsequent dabs reuse it. Commit freezes the buffer. Undo stores immutable references or validated payloads and restores absence exactly.
+
+Canvas bounds are finite. Use floor division for negative coordinates, clip edits to the canvas, and zero unused pixels in edge tiles. Normal painting must not allocate arbitrary off-canvas tiles. Canvas resize/crop behavior must explicitly decide whether pixels are discarded; the initial implementation discards cropped pixels through an undoable transaction.
+
+Use checked arithmetic for dimensions, tile count, stride, and allocation size. Reject non-finite and overflowing requests before allocation.
+
+## Cache identity and invalidation
+
+For raw layer textures, identity includes:
+
+`documentId + layerId + tileCoordinate + contentRevision + pixelFormat`
+
+For derived composite tiles, identity includes document/session identity, affected content revisions, layer ordering and properties, output scale, and rendering/color settings. A monotonically increasing render generation may invalidate composites conservatively at first; structured changes later limit work to affected tiles.
+
+A document-wide revision alone is safe but can discard too much cache. A coordinate alone is unsafe. Never rely on pointer addresses as persistent identity.
+
+Invalidation rules:
+
+- Raster edit: affected tile regions.
+- Shape/text edit: union of old/new bounds plus stroke/filter support.
+- Opacity/visibility/blend change: affected layer bounds and all dependent composites.
+- Layer order change: composites influenced by reordered layers.
+- Document switch or destruction: namespace separation and eviction.
+- Display conversion change: presentation caches, not stored document pixels.
+
+Derived textures and rasterized vectors are disposable. CPU tiles and editable objects remain authoritative.
+
+## Rendering policy
+
+Start with a CPU composite tile cache and explicit visible-region queries. During painting, recompute changed composite tiles; during panning, reuse valid composites. Upload only changed visible tiles to the accelerated viewport.
+
+Do not confuse reduced uploads with partial framebuffer preservation. A viewport can redraw visible cached quads every frame while avoiding expensive recomposition. Culling, tile reuse, and dirty updates are application responsibilities.
+
+For minification, generate derived lower-resolution composites rather than sampling one pixel from many full-resolution tiles. Handle tile borders with filter-aware gutters or neighbor sampling. Test seams, transparent edges, and zoomed-out appearance. Choose nearest-neighbor at high pixel-editing zoom and a documented filtering policy elsewhere.
+
+CPU export accepts arbitrary bounded regions/scales and uses the same compositing semantics. Large exports run in chunks where the codec permits them and check peak scratch memory before beginning.
+
+## Memory accounting
+
+For RGBA8, each 256×256 tile consumes 262,144 bytes, or 256 KiB, before allocator overhead.
+
+| Allocation | Raw size |
+| --- | --- |
+| One fully allocated 4096×4096 layer | 64 MiB |
+| Ten such layers | 640 MiB |
+| One fully allocated 8192×8192 layer | 256 MiB |
+| Ten such layers | 2.5 GiB |
+
+Sparse layers can use much less. Compression is data-dependent and must not be used as a hard bound.
+
+Start with configurable provisional caps of 256 MiB for resident history payloads, 128 MiB for CPU derived caches, and 128 MiB for GPU caches. These are tuning values for the reference workload, not guarantees for every computer. Account for shared storage once and include active transactions, pending snapshots, decoded images, and worker scratch in peak-memory reporting.
+
+Evict derived caches first. Spill eligible history according to its separate budget. Reject or cancel edits that cannot safely fit the supported document budget; never silently omit tiles. Full document tile paging is deferred until tested workloads require it.

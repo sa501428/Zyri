@@ -30,9 +30,9 @@
     <key>CFBundleIconFile</key>
     <string>icon</string>
 
-    <!-- Minimum macOS version: 13 Ventura (required for Qt 6.5+) -->
+    <!-- Keep the bundle minimum consistent with the compiler deployment target. -->
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
 
     <!-- Declare supported document types -->
     <key>CFBundleDocumentTypes</key>

@@ -1,112 +1,142 @@
 cmake_minimum_required(VERSION 3.25)
-
-project(Zyri VERSION 0.1.0 LANGUAGES CXX OBJCXX)
-
+if((CMAKE_HOST_APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND
+   (NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL ""))
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+project(Zyri VERSION 0.2.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
-
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-
-include(ZyriVersion)
-include(CompilerOptions)
-
-# ── Qt 6 ──────────────────────────────────────────────────────────────────────
-find_package(Qt6 REQUIRED COMPONENTS
-    Core
-    Gui
-    Widgets
-    OpenGL
-    OpenGLWidgets
-    Pdf
-    PrintSupport
-    Concurrent
-    Test
-)
-qt_standard_project_setup()
-
-# ── Third-party ───────────────────────────────────────────────────────────────
-find_package(PkgConfig REQUIRED)
-
-# littlecms — ICC color profiles
-pkg_check_modules(LCMS2 REQUIRED IMPORTED_TARGET lcms2)
-
-# poppler-qt6 — PDF import (optional; Phase 6 feature)
-# Homebrew's poppler formula does not ship poppler-qt6.pc on all configurations,
-# so we make this optional and fall back to Qt6::Pdf for rasterized PDF rendering.
-option(ZYRI_ENABLE_POPPLER "Use poppler-qt6 for enhanced PDF import" OFF)
-if(ZYRI_ENABLE_POPPLER)
-    pkg_check_modules(POPPLER REQUIRED poppler-qt6)
-    if(POPPLER_FOUND)
-        message(STATUS "poppler-qt6 found — enhanced PDF import enabled")
-        add_compile_definitions(ZYRI_HAS_POPPLER)
+include(CTest)
+option(ZYRI_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
+set(ZYRI_SANITIZER_SET "address,undefined" CACHE STRING "Compiler sanitizers to enable")
+option(ZYRI_PDF "Enable PDF import" ON)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Concurrent Svg)
+if(ZYRI_PDF)
+    find_package(Qt6 6.8 REQUIRED COMPONENTS Pdf)
+endif()
+if(APPLE)
+    # Aggregate SDKs can contain modules built for different macOS versions.
+    # Keep the binary and Info.plist at least as new as every linked Qt module.
+    find_program(ZYRI_OTOOL otool REQUIRED)
+    foreach(module Core Gui Widgets Concurrent Svg Pdf)
+        if(TARGET Qt6::${module})
+            get_target_property(qt_module_file Qt6::${module} IMPORTED_LOCATION_RELEASE)
+            if(qt_module_file)
+                execute_process(COMMAND "${ZYRI_OTOOL}" -l "${qt_module_file}"
+                    OUTPUT_VARIABLE load_commands ERROR_QUIET)
+                string(REGEX MATCH "minos ([0-9]+\\.[0-9]+(\\.[0-9]+)?)" version_match "${load_commands}")
+                if(version_match AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS CMAKE_MATCH_1)
+                    message(STATUS "Raising macOS deployment target to ${CMAKE_MATCH_1} for Qt ${module}")
+                    set(CMAKE_OSX_DEPLOYMENT_TARGET "${CMAKE_MATCH_1}" CACHE STRING "Minimum macOS version" FORCE)
+                endif()
+            endif()
+        endif()
+    endforeach()
+endif()
+find_package(libzip 1.11 CONFIG QUIET)
+if(NOT libzip_FOUND)
+    include(FetchContent)
+    set(BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+    set(BUILD_REGRESS OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(BUILD_DOC OFF CACHE BOOL "" FORCE)
+    set(ENABLE_BZIP2 OFF CACHE BOOL "" FORCE)
+    set(ENABLE_LZMA OFF CACHE BOOL "" FORCE)
+    set(ENABLE_ZSTD OFF CACHE BOOL "" FORCE)
+    set(ENABLE_OPENSSL OFF CACHE BOOL "" FORCE)
+    set(ENABLE_GNUTLS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_MBEDTLS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_COMMONCRYPTO OFF CACHE BOOL "" FORCE)
+    set(ENABLE_WINDOWS_CRYPTO OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_OSSFUZZ OFF CACHE BOOL "" FORCE)
+    set(LIBZIP_DO_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(libzip SYSTEM URL "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libzip-1.11.4.tar.xz"
+        URL_HASH SHA256=8a247f57d1e3e6f6d11413b12a6f28a9d388de110adc0ec608d893180ed7097b
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+    FetchContent_MakeAvailable(libzip)
+    if(NOT TARGET libzip::zip)
+        add_library(libzip::zip ALIAS zip)
     endif()
-else()
-    message(STATUS "poppler-qt6 disabled — using Qt6::Pdf for PDF rendering")
 endif()
-
-# zlib — tile delta compression (bundled with Qt on most platforms)
-find_package(ZLIB REQUIRED)
-
-# ── Submodules ────────────────────────────────────────────────────────────────
-add_subdirectory(src/core)
-add_subdirectory(src/canvas)
-add_subdirectory(src/engine)
-add_subdirectory(src/tools)
-add_subdirectory(src/history)
-add_subdirectory(src/io)
-add_subdirectory(src/preferences)
-add_subdirectory(src/ui)
-add_subdirectory(src/app)
-add_subdirectory(tests)
-
-# ── Main executable ───────────────────────────────────────────────────────────
-if(APPLE)
-    set(MACOSX_SOURCES src/platform/macos/BookmarkManager.mm src/platform/macos/MacOSAppearance.mm)
+add_library(ZyriOptions INTERFACE)
+if(MSVC)
+    target_compile_options(ZyriOptions INTERFACE /W4 /utf-8 /permissive-)
 else()
-    set(MACOSX_SOURCES "")
+    target_compile_options(ZyriOptions INTERFACE -Wall -Wextra -Wpedantic)
+    if(ZYRI_SANITIZERS)
+        target_compile_options(ZyriOptions INTERFACE -fsanitize=${ZYRI_SANITIZER_SET} -fno-omit-frame-pointer)
+        target_link_options(ZyriOptions INTERFACE -fsanitize=${ZYRI_SANITIZER_SET})
+    endif()
 endif()
-
-add_executable(Zyri
-    src/main.cpp
-    ${MACOSX_SOURCES}
-    resources/resources.qrc
-)
-
-target_link_libraries(Zyri PRIVATE
-    ZyriApp
-    ZyriCore
-    ZyriCanvas
-    ZyriEngine
-    ZyriTools
-    ZyriHistory
-    ZyriIO
-    ZyriPreferences
-    ZyriUI
-    Qt6::Widgets
-    Qt6::OpenGLWidgets
-    Qt6::Concurrent
-)
-
-# ── macOS bundle ──────────────────────────────────────────────────────────────
+add_library(ZyriModel STATIC src/editor/Document.cpp src/editor/Session.cpp src/editor/ProjectIO.cpp)
+target_include_directories(ZyriModel PUBLIC src)
+target_link_libraries(ZyriModel PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent Qt6::Svg ZyriOptions PRIVATE libzip::zip)
+if(ZYRI_PDF)
+    target_link_libraries(ZyriModel PUBLIC Qt6::Pdf)
+    target_compile_definitions(ZyriModel PUBLIC ZYRI_PDF=1)
+endif()
+add_library(ZyriDesktop STATIC src/editor/Canvas.cpp src/editor/MainWindow.cpp)
+target_link_libraries(ZyriDesktop PUBLIC ZyriModel Qt6::Widgets ZyriOptions)
+qt_add_executable(Zyri src/main.cpp resources/resources.qrc)
+target_link_libraries(Zyri PRIVATE ZyriDesktop)
 if(APPLE)
-    set_target_properties(Zyri PROPERTIES
-        MACOSX_BUNDLE TRUE
+    set_target_properties(Zyri PROPERTIES MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_SOURCE_DIR}/packaging/macos/Info.plist.in"
-        MACOSX_BUNDLE_BUNDLE_NAME "Zyri"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_NAME Zyri MACOSX_BUNDLE_GUI_IDENTIFIER com.zyri.app
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_GUI_IDENTIFIER "com.zyri.app"
-        MACOSX_BUNDLE_ICON_FILE "icon"
-    )
-    # Copy icon.icns into the bundle's Resources folder
-    set(APP_ICON "${CMAKE_SOURCE_DIR}/packaging/macos/icon.icns")
-    set_source_files_properties("${APP_ICON}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-    target_sources(Zyri PRIVATE "${APP_ICON}")
-    target_link_libraries(Zyri PRIVATE "-framework AppKit" "-framework Foundation")
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE icon.icns)
+    target_sources(Zyri PRIVATE packaging/macos/icon.icns)
+    set_source_files_properties(packaging/macos/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+endif()
+install(TARGETS Zyri BUNDLE DESTINATION . RUNTIME DESTINATION bin)
+if(APPLE)
+    get_filename_component(zyri_qt_library_dir "${Qt6_DIR}/../.." ABSOLUTE)
+    find_program(ZYRI_MACDEPLOYQT macdeployqt HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
+    set(zyri_plugin_options "")
+    foreach(plugin QCocoaIntegrationPlugin QOffscreenIntegrationPlugin QJpegPlugin QMacStylePlugin)
+        if(NOT TARGET Qt6::${plugin})
+            message(FATAL_ERROR "Required Qt desktop plugin is missing: ${plugin}")
+        endif()
+        get_target_property(plugin_type Qt6::${plugin} QT_PLUGIN_TYPE)
+        set(plugin_destination "Zyri.app/Contents/PlugIns/${plugin_type}")
+        # Materialize plugin binaries: package managers may expose relative symlinks.
+        install(CODE "
+            file(REAL_PATH \"$<TARGET_FILE:Qt6::${plugin}>\" plugin_source)
+            set(plugin_output \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${plugin_destination}/$<TARGET_FILE_NAME:Qt6::${plugin}>\")
+            if(IS_SYMLINK \"\${plugin_output}\")
+                file(REMOVE \"\${plugin_output}\")
+            endif()
+            file(INSTALL \"\${plugin_source}\" DESTINATION \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${plugin_destination}\" TYPE FILE)
+        ")
+        string(APPEND zyri_plugin_options "    \"-executable=\${bundle}/Contents/PlugIns/${plugin_type}/$<TARGET_FILE_NAME:Qt6::${plugin}>\"\n")
+    endforeach()
+    configure_file(packaging/macos/deploy.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/DeployMac.in.cmake" @ONLY)
+    file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/DeployMac-$<CONFIG>.cmake"
+        INPUT "${CMAKE_CURRENT_BINARY_DIR}/DeployMac.in.cmake")
+    set(deploy_script "${CMAKE_CURRENT_BINARY_DIR}/DeployMac-$<CONFIG>.cmake")
+else()
+    qt_generate_deploy_app_script(TARGET Zyri OUTPUT_SCRIPT deploy_script NO_UNSUPPORTED_PLATFORM_ERROR)
 endif()
 
-# ── Install / packaging ───────────────────────────────────────────────────────
-include(Packaging)
+install(SCRIPT ${deploy_script})
+set(CPACK_PACKAGE_NAME Zyri)
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+if(APPLE)
+    set(CPACK_GENERATOR DragNDrop)
+elseif(WIN32)
+    set(CPACK_GENERATOR ZIP)
+else()
+    set(CPACK_GENERATOR TGZ)
+endif()
+include(CPack)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_executable(TestEditor tests/editor/test_editor.cpp resources/resources.qrc)
+    target_link_libraries(TestEditor PRIVATE ZyriDesktop Qt6::Test)
+    add_test(NAME Editor COMMAND TestEditor)
+    set_tests_properties(Editor PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+endif()

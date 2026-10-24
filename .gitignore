@@ -1,60 +1,79 @@
-# ── Build output ──────────────────────────────────────────────────────────────
-build/
-build-*/
-cmake-build-*/
-*.app/
-*.dmg
-
-# ── CMake ─────────────────────────────────────────────────────────────────────
+# CMake builds and generated packaging output
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+/dist/
+CMakeUserPresets.json
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+/Testing/
 Makefile
+build.ninja
+.ninja_deps
+.ninja_log
 CPackConfig.cmake
 CPackSourceConfig.cmake
 _CPack_Packages/
+/Zyri-*.zip
+/Zyri-*.tar.gz
 
-# ── Compiler artifacts ────────────────────────────────────────────────────────
+# Compiled binaries, bundles, and debugging symbols
 *.o
 *.obj
 *.a
 *.lib
 *.so
+*.so.*
 *.dylib
 *.dll
 *.exe
+*.app/
+*.dmg
+*.dSYM/
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.gcda
+*.gcno
+*.profraw
+*.profdata
 
-# ── Qt MOC / RCC / UIC ────────────────────────────────────────────────────────
+# Generated Qt sources and local dependency installations
 moc_*.cpp
 moc_*.h
 qrc_*.cpp
 ui_*.h
 *.moc
+.qmake.stash
+.qmake.cache
+vcpkg_installed/
+conaninfo.txt
 
-# ── macOS ─────────────────────────────────────────────────────────────────────
-.DS_Store
-*.xcuserdata
-*.xcworkspace
-*.xcodeproj
-
-# ── Windows ───────────────────────────────────────────────────────────────────
-Thumbs.db
-ehthumbs.db
-*.suo
-*.user
-
-# ── IDE ───────────────────────────────────────────────────────────────────────
+# Local IDE state (shared CMake presets and dependency archives stay tracked)
 .vscode/
 .idea/
-*.kdev4
+.vs/
 .clangd/
-compile_commands.json
-
-# ── Clang tooling ─────────────────────────────────────────────────────────────
+.cache/
 .clang-tidy-cache/
+*.kdev4
+*.suo
+*.user
+xcuserdata/
+*.xcuserstate
 
-# ── Conan / vcpkg ─────────────────────────────────────────────────────────────
-conaninfo.txt
-conanfile.lock
-vcpkg_installed/
+# Operating system and editor temporary files
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

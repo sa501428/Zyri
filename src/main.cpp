@@ -1,70 +1,87 @@
+#include "editor/Application.h"
+#include "editor/MainWindow.h"
+#include "editor/ProjectIO.h"
 #include <QApplication>
+#include <QCommandLineParser>
+#include <QDir>
 #include <QIcon>
-#include <QMainWindow>
-#include <QStatusBar>
-#include <QMenuBar>
-#include <QSurfaceFormat>
+#include <QTextStream>
+#include <QThreadPool>
+#include <cmath>
 
-#include "canvas/CanvasViewport.h"
-#include "core/Document.h"
-#include "core/RasterLayer.h"
-
-int main(int argc, char* argv[])
-{
-    // Request OpenGL 3.3 Core for the canvas viewport.
-    QSurfaceFormat fmt;
-    fmt.setVersion(3, 3);
-    fmt.setProfile(QSurfaceFormat::CoreProfile);
-    fmt.setSamples(0); // no MSAA on the canvas — we handle AA in shaders
-    QSurfaceFormat::setDefaultFormat(fmt);
-
-    QApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("Zyri"));
-    app.setApplicationVersion(QStringLiteral("0.1.0"));
-    app.setOrganizationName(QStringLiteral("Zyri"));
-    app.setOrganizationDomain(QStringLiteral("zyri.app"));
-    app.setWindowIcon(QIcon(QStringLiteral(":/icons/logo.png")));
-
-    // ── Default document (1920x1080, one blank raster layer) ------------------
-    auto* doc   = new Zyri::Document(QSize(1920, 1080), 96, Qt::transparent);
-    auto  layer = std::make_unique<Zyri::RasterLayer>(QStringLiteral("Background"));
-    doc->layers()->addLayer(std::move(layer));
-
-    // ── Canvas viewport -------------------------------------------------------
-    auto* viewport = new Zyri::CanvasViewport;
-    viewport->setDocument(doc);
-
-    // ── Main window -----------------------------------------------------------
-    QMainWindow win;
-    win.setWindowTitle(QStringLiteral("Zyri"));
-    win.resize(1400, 900);
-    win.setCentralWidget(viewport);
-
-    // ── Menu bar --------------------------------------------------------------
-    auto* fileMenu = win.menuBar()->addMenu(QStringLiteral("&File"));
-    fileMenu->addAction(QStringLiteral("&New"),      QKeySequence::New);
-    fileMenu->addAction(QStringLiteral("&Open..."),  QKeySequence::Open);
-    fileMenu->addSeparator();
-    fileMenu->addAction(QStringLiteral("&Save"),     QKeySequence::Save);
-    fileMenu->addAction(QStringLiteral("Save &As..."), QKeySequence::SaveAs);
-    fileMenu->addSeparator();
-    fileMenu->addAction(QStringLiteral("&Quit"),     QKeySequence::Quit,
-                        &app, &QApplication::quit);
-
-    auto* editMenu = win.menuBar()->addMenu(QStringLiteral("&Edit"));
-    editMenu->addAction(QStringLiteral("&Undo"), QKeySequence::Undo);
-    editMenu->addAction(QStringLiteral("&Redo"), QKeySequence::Redo);
-
-    // ── Status bar: live canvas cursor coordinates ----------------------------
-    QObject::connect(viewport, &Zyri::CanvasViewport::canvasPosChanged,
-                     [&win](const QPointF& p) {
-                         win.statusBar()->showMessage(
-                             QStringLiteral("X: %1   Y: %2")
-                                 .arg(qRound(p.x()))
-                                 .arg(qRound(p.y())));
-                     });
-    win.statusBar()->showMessage(QStringLiteral("Ready"));
-
-    win.show();
-    return app.exec();
+int main(int argc, char** argv) {
+    Zyri::Application app(argc, argv);
+    app.setApplicationName("Zyri");
+    app.setOrganizationName("Zyri");
+    app.setOrganizationDomain("zyri.app");
+    app.setApplicationVersion("0.2.0");
+    app.setWindowIcon(QIcon(":/icons/logo.png"));
+    QThreadPool::globalInstance()->setMaxThreadCount(2);
+    QCommandLineParser parser;
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.addPositionalArgument("files", "Projects or images to open");
+    QCommandLineOption demo(
+        "render-demo", "Generate a mixed-document fixture without opening a window", "directory");
+    parser.addOption(demo);
+    parser.process(app);
+    if (parser.isSet(demo)) {
+        QString dir = parser.value(demo);
+        QDir().mkpath(dir);
+        Zyri::Document document;
+        document.size = {768, 512};
+        document.layers.emplace_back();
+        Zyri::Session session(document);
+        session.foreground = QColor("#327bea");
+        session.brush.size = 64;
+        session.beginStroke({70, 200});
+        for (int i = 0; i < 60; ++i)
+            session.strokeTo({70 + i * 9., 200 + std::sin(i * .12) * 80});
+        session.endStroke();
+        Zyri::Object shape;
+        shape.kind = Zyri::ObjectKind::RoundedRectangle;
+        shape.rect = {260, 300, 280, 120};
+        shape.fill = QColor("#f6ac35");
+        session.addObject(shape);
+        Zyri::Object text;
+        text.kind = Zyri::ObjectKind::Text;
+        text.text = "Zyri";
+        text.rect = {50, 30, 400, 100};
+        text.fill = QColor("#202a40");
+        text.font.setPointSize(48);
+        session.addObject(text);
+        QString error = Zyri::saveProject(session.document(), dir + "/demo.zyri");
+        if (error.isEmpty())
+            error = Zyri::exportImage(session.document(), dir + "/demo.png");
+        if (error.isEmpty())
+            error = Zyri::exportSvg(session.document(), dir + "/demo.svg");
+        if (error.isEmpty())
+            error = Zyri::exportImage(session.document(), dir + "/demo.pdf");
+        if (!error.isEmpty()) {
+            QTextStream(stderr) << error << Qt::endl;
+            return 1;
+        }
+        return 0;
+    }
+    Zyri::MainWindow window;
+    app.requestClose = [&window] { window.close(); };
+    QObject::connect(&window, &Zyri::MainWindow::closeAccepted, &app, [&app] {
+        app.quitApproved = true;
+        QMetaObject::invokeMethod(&app, &QCoreApplication::quit, Qt::QueuedConnection);
+    });
+    app.openFile = [&window](QString path) { window.openPath(path); };
+    for (const auto& path : app.pendingFiles)
+        window.openPath(path);
+    for (const auto& path : parser.positionalArguments())
+        window.openPath(path);
+    if (parser.positionalArguments().isEmpty()) {
+        Zyri::Document document;
+        document.layers.emplace_back();
+        window.addDocument(document, {}, true);
+    }
+    window.show();
+    int result = app.exec();
+    app.openFile = {};
+    app.requestClose = {};
+    return result;
 }

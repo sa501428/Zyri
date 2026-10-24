@@ -1,113 +1,96 @@
 # Building Zyri
 
-## Prerequisites
+## Dependencies
 
-### macOS
+Use CMake 3.25+, a C++20 compiler, and Qt 6.8 or later with Core, Gui, Widgets, Concurrent, and Svg. Qt Pdf enables PDF import and is on by default; disable with `-DZYRI_PDF=OFF`. PDF export uses Qt Gui and remains available.
 
-Install dependencies via Homebrew:
+The tested local baseline is AppleClang 17 and Qt 6.10.2 on macOS. The deployment target is raised to the minimum of the linked SDK modules when necessary. This Homebrew SDK includes QtSvg built for macOS 15, so its bundled app requires macOS 15 or later; an older compatible SDK can support an older deployment target. Objective-C++ and OpenGL are not required by application code.
 
-```bash
-brew install qt@6 lcms2 poppler cmake pkg-config
+CMake first looks for an installed libzip CMake package. If unavailable, FetchContent extracts the included libzip 1.11.4 source archive and verifies its SHA-256. Only the ZIP library and zlib compression are needed; tools, optional crypto/compression dependencies, and examples are disabled.
+
+The default fallback is offline. You can also supply an existing libzip installation via CMAKE_PREFIX_PATH, or an unpacked source tree:
+
+```sh
+cmake -S . -B build \
+  -DCMAKE_PREFIX_PATH="/path/to/Qt;/path/to/dependencies" \
+  -DFETCHCONTENT_SOURCE_DIR_LIBZIP=/path/to/libzip-1.11.4 \
+  -DCMAKE_BUILD_TYPE=Debug
 ```
 
-Qt is keg-only on Homebrew, so add it to your PATH:
+The source archive came from the official libzip release site; its license and provenance are under third_party. zlib must be supplied by the platform or dependency manager. The Windows CI uses the static MD vcpkg triplet.
 
-```bash
-echo 'export PATH="/opt/homebrew/opt/qt@6/bin:$PATH"' >> ~/.zshrc
-echo 'export CMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6"' >> ~/.zshrc
-source ~/.zshrc
-```
+## Configure and build
 
-### Windows
+On macOS with Homebrew Qt:
 
-1. Install [Qt 6.7+](https://www.qt.io/download) with the MSVC 2022 kit
-2. Install [CMake](https://cmake.org/download/) 3.25+
-3. Install [vcpkg](https://vcpkg.io/) then:
-   ```
-   vcpkg install lcms2 poppler
-   ```
-
-### Linux (Ubuntu/Debian)
-
-```bash
-sudo apt install qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev \
-                 liblcms2-dev libpoppler-qt6-dev cmake pkg-config \
-                 libgl-dev
-```
-
----
-
-## Build
-
-```bash
-# Clone (if you haven't already)
-git clone https://github.com/yourusername/Zyri.git
-cd Zyri
-
-# Configure (macOS with Homebrew Qt)
-cmake -B build -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6"
-
-# Build
-cmake --build build --parallel
-
-# Run
-./build/Zyri.app/Contents/MacOS/Zyri     # macOS
-./build/Zyri                              # Linux/Windows
-```
-
-### Release build
-
-```bash
-cmake -B build-release -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6"
-cmake --build build-release --parallel
-```
-
-### macOS .dmg packaging
-
-```bash
-cmake --build build-release --target package
-```
-
----
-
-## Running Tests
-
-```bash
-cmake --build build --parallel
+```sh
+cmake -S . -B build \
+  -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6;/opt/homebrew" \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build --parallel 6
 ctest --test-dir build --output-on-failure
 ```
 
-Or run individual test binaries directly:
+All registered tests use Qt's offscreen platform. They create synthetic documents, widgets, and files; they do not inspect the user's desktop.
 
-```bash
-./build/tests/ZyriCoreTests
-./build/tests/ZyriHistoryTests
-./build/tests/ZyriEngineTests
+With Ninja installed, the equivalent presets are:
+
+```sh
+cmake --preset debug -DCMAKE_PREFIX_PATH=/path/to/Qt
+cmake --build --preset debug
+ctest --preset debug
 ```
 
----
+On Windows, use a Qt installation matching the compiler and architecture, with an appropriate CMAKE_PREFIX_PATH. CMake's generated deployment script handles the platform-specific Qt dependency deployment. The CI workflow includes macOS, Ubuntu, and Windows jobs; only the local macOS run has been observed in this development session.
 
-## Troubleshooting
+## Sanitizers
 
-**Qt not found:**
-```
-CMake Error: Could not find a package configuration file provided by "Qt6"
-```
-Add your Qt install to `CMAKE_PREFIX_PATH`:
-```bash
-cmake -B build -DCMAKE_PREFIX_PATH="/path/to/qt/6.x/macos"
-```
-
-**lcms2 not found:**
-```bash
-brew install lcms2   # macOS
-sudo apt install liblcms2-dev   # Ubuntu
+```sh
+cmake -S . -B build-sanitized \
+  -DCMAKE_PREFIX_PATH="/path/to/Qt" \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DZYRI_SANITIZERS=ON
+cmake --build build-sanitized --parallel 6
+ASAN_OPTIONS=detect_leaks=0 ctest --test-dir build-sanitized --output-on-failure
 ```
 
-**poppler-qt6 not found:**
-```bash
-brew install poppler   # macOS
-sudo apt install libpoppler-qt6-dev   # Ubuntu
+The address/undefined-behavior flags propagate through the actual application/library/test targets. Leak detection is disabled in the macOS test command because platform Qt/font allocations are outside the editor's ownership. Do not infer performance from a sanitized build.
+
+The local AppleClang 17 / macOS 26.6.2 AddressSanitizer runtime stalled before main, including for a minimal standalone probe. A UBSan-only build was validated using `-DZYRI_SANITIZER_SET=undefined`. AddressSanitizer compilation succeeded, but an ASan runtime pass is not claimed. The CI configuration uses UBSan on macOS and address/undefined sanitizers on Linux.
+
+Use BUILD_TESTING=OFF for a build without the test executable. It then does not require Qt Test.
+
+## Run or generate fixtures
+
+The macOS executable is `build/Zyri.app/Contents/MacOS/Zyri`. On other desktop platforms, use the corresponding executable under the build directory.
+
+```sh
+QT_QPA_PLATFORM=offscreen build/Zyri.app/Contents/MacOS/Zyri \
+  --render-demo /tmp/zyri-demo
 ```
+
+The fixture command produces `demo.zyri`, `demo.png`, `demo.svg`, and `demo.pdf`. It exercises painting, vector shapes, text, native persistence, and exports without showing a window.
+
+## Package
+
+```sh
+cmake -S . -B build-release \
+  -DCMAKE_PREFIX_PATH="/path/to/Qt" \
+  -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build-release --parallel 6
+cmake --install build-release --prefix /tmp/zyri-staged
+cpack --config build-release/CPackConfig.cmake
+```
+
+On macOS the install step uses Qt's deployment tools and explicitly selects the Cocoa/offscreen, JPEG, and native-style plugins. This avoids bundling unrelated virtual-keyboard/QML plugins from aggregate Qt installations. CPack selects a DMG on macOS, ZIP on Windows, and TGZ on Linux.
+
+The direct-distribution signing helper at `packaging/macos/sign-and-notarize.sh` requires the developer's own signing identity and an existing notarytool keychain profile. It does not provision credentials. Review and run it on the staged app when preparing a release; signing/notarization were not performed in this session.
+
+## Development layout
+
+- ZyriModel: document/value types, CPU renderer, transactions/history, persistence.
+- ZyriDesktop: widget canvas, input, panels, menus, background job/recovery coordination.
+- TestEditor: behavioral QtTest suite registered with root CTest.
+- Zyri: main executable and command-line fixture mode.
+
+There are no required lcms2, Poppler, private Qt ZIP, or private GPU headers in the current implementation.

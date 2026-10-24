@@ -1,3 +1,5 @@
+> Historical product brief. The October 2026 [implementation plan](docs/implementation-plan.md) supersedes the technical prescriptions and release scope below. This file is retained as context, not as a statement of implemented behavior.
+
 Updated technical specifications with your changes:
 
 # Technical Specifications — Local-Only Graphics Editor

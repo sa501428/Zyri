@@ -1,247 +1,80 @@
 # Zyri
 
-A local-only native desktop graphics editor for macOS (with Windows and Linux targets). Inspired by Paint.NET with lightweight Illustrator-style vector features. Built with C++20 and Qt 6.
+Zyri is a local desktop editor for painting, image editing, and lightweight vector illustration. It is built with C++20 and Qt 6 Widgets.
 
-![Zyri Logo](logo.png)
+![Zyri logo](logo.png)
 
----
+The original prototype has been replaced with a working document engine and desktop editor. Raster pixels use sparse tiles, vector shapes and text remain editable, and all persistent edits share transaction and undo handling.
 
-## Features (Roadmap)
+## Implemented
 
-| Phase | Status | Scope |
-|-------|--------|-------|
-| 0 — Build Infrastructure | **Done** | CMake scaffold, blank window, smoke tests |
-| 1 — Core Data Model + Undo | **Done** | Document, LayerStack, delta-compressed undo (100 states) |
-| 2 — Canvas Viewport | Planned | OpenGL tiled renderer, pinch-zoom, Retina |
-| 3 — Painting + Undo | Planned | Brush/Pencil/Eraser, pressure, pixel-exact undo |
-| 4 — UI Shell | Planned | Layer panel, color panel, dark/light theme, document tabs |
-| 5 — Complete Tool Set | Planned | Selection, fill, shapes, text, transform |
-| 6 — File I/O + Autosave | Planned | `.zyri` format, PNG/JPEG ICC, PDF, crash recovery |
-| 7 — Polish + Packaging | Planned | Signed DMG, preferences, rulers, zoom-to-cursor |
+- Document tabs, New/Open/Save/Save As, recent files, drag and drop, and unsaved-change protection.
+- Continuous brush, pencil, eraser, pressure input, hardness, spacing, flow, and stroke opacity.
+- Rectangle, ellipse, and lasso selections, with add/subtract/intersect; clipboard images, fill, and eyedropper.
+- Raster and vector layers with visibility, lock, opacity, ordering, duplication, and Normal/Multiply/Screen/Overlay blending.
+- Editable rectangles, rounded rectangles, ellipses, lines, polygons, cubic paths, and basic text.
+- Object move/scale, node/handle movement, append/delete nodes, fill/stroke, font controls, and object ordering.
+- Content transforms, crop, canvas/image resize, view pan/zoom/rotation, and high DPI coordinates.
+- Exact snapshot undo/redo, saved-state tracking, bounded history with local spill, and cancellation.
+- Atomic native ZIP project files preserving raster bytes, identities, shapes, paths, text, and layer properties.
+- PNG/JPEG import/export with sRGB conversion/metadata; bounded SVG import/export; PDF raster import and PDF export.
+- Background save/export/fill/transform work, stale-result rejection, local recovery generations, and recovery prompts.
+- Light/dark/system appearance, dockable panels, native menus/dialogs, canvas tool shortcuts, and preferences for history, recovery, and menu shortcuts.
 
----
+All processing and storage stay local. The application has no account, telemetry, or cloud service.
 
-## Architecture
+## Build and test
 
-```
-main.cpp
-  └─ ZyriApp  (Application, AppController, SessionManager)
-       ├─ ZyriUI       (MainWindow, panels, dialogs, theme)
-       │    └─ ZyriCanvas  (CanvasViewport, TileCache, GLCompositor, shaders)
-       │         └─ ZyriEngine  (PaintEngine, FillEngine, VectorScene)
-       ├─ ZyriTools    (ToolRegistry — Brush, Pencil, Eraser, Fill, Select, Shape, Text, Transform)
-       ├─ ZyriHistory  (UndoStack 100-state ring, DeltaCompressor, Commands)
-       ├─ ZyriIO       (ZyriFormat .zyri ZIP, PNG/JPEG/PDF handlers, Clipboard)
-       ├─ ZyriPreferences
-       └─ ZyriCore     (Document, Layer hierarchy, ColorProfile / lcms2)
-```
+Required: CMake 3.25+, C++20 compiler, Qt 6.8+ Core/Gui/Widgets/Concurrent/Svg, and optionally Qt Pdf. Qt 6.10.2 is the tested baseline. A system libzip can be used; otherwise CMake builds the included, hash-verified libzip 1.11.4 source archive.
 
-Each subdirectory compiles to a static library. See [docs/architecture.md](docs/architecture.md) for the full design, and [docs/tile-system.md](docs/tile-system.md) / [docs/undo-design.md](docs/undo-design.md) for deep dives.
+On macOS with Homebrew Qt already installed:
 
-**Key design points:**
-- Canvas uses `QOpenGLWidget` with 256×256 ARGB32-premultiplied tiles. Only dirty tiles are re-uploaded to the GPU.
-- Undo snapshots XOR before/after tile data and zlib-deflates the result. A typical sparse brush stroke compresses 256 KB → < 2 KB per tile.
-- Color management uses [littlecms](https://www.littlecms.com/) (lcms2) for ICC profile embedding and transforms; Qt's own color management is not used.
-- macOS sandbox file access is maintained via security-scoped bookmarks (`BookmarkManager.mm`).
-- Tablet pressure events are intercepted in `event()`, not `tabletEvent()` — a Qt 6 / macOS requirement.
-
----
-
-## Requirements
-
-### All platforms
-| Dependency | Version | Notes |
-|------------|---------|-------|
-| CMake | ≥ 3.25 | |
-| C++ compiler | C++20 | Clang 15+, GCC 12+, MSVC 2022 |
-| Qt 6 | ≥ 6.5 | Core, Gui, Widgets, OpenGL, OpenGLWidgets, Pdf, PrintSupport, Concurrent, Test |
-| lcms2 | any recent | ICC color management |
-| zlib | any | Bundled with Qt on most platforms |
-
-### macOS (additional)
-| Dependency | Notes |
-|------------|-------|
-| Xcode Command Line Tools | `xcode-select --install` |
-| macOS 13 Ventura or later | Minimum deployment target |
-
-### Optional
-| Dependency | CMake flag | Notes |
-|------------|-----------|-------|
-| poppler-qt6 | `-DZYRI_ENABLE_POPPLER=ON` | Enhanced PDF import; off by default |
-
----
-
-## Building
-
-### macOS (Homebrew) — recommended
-
-```bash
-# 1. Install dependencies
-brew install qt@6 little-cms2 zlib
-
-# 2. Clone the repo
-git clone https://github.com/yourname/Zyri.git
-cd Zyri
-
-# 3. Configure
-cmake -B build \
-  -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6;/opt/homebrew" \
-  -DCMAKE_BUILD_TYPE=Release
-
-# 4. Build
-cmake --build build --parallel
-
-# 5. Run
-open build/Zyri.app
-# or
-./build/Zyri.app/Contents/MacOS/Zyri
-```
-
-For a **debug build with AddressSanitizer**:
-
-```bash
-cmake -B build-debug \
+```sh
+cmake -S . -B build \
   -DCMAKE_PREFIX_PATH="/opt/homebrew/opt/qt@6;/opt/homebrew" \
   -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-debug --parallel
+cmake --build build --parallel 6
+ctest --test-dir build --output-on-failure
 ```
 
-To enable the optional poppler-based PDF importer:
+Launch `build/Zyri.app` on macOS, or `build/Zyri` on Linux. See [build notes](docs/build.md) for sanitizer, offline dependency, Windows, and packaging instructions.
 
-```bash
-brew install poppler   # must have poppler-qt6.pc available
-cmake -B build -DZYRI_ENABLE_POPPLER=ON ...
+A headless fixture command creates an editable project and PNG/SVG/PDF output without opening a window:
+
+```sh
+QT_QPA_PLATFORM=offscreen build/Zyri.app/Contents/MacOS/Zyri \
+  --render-demo /tmp/zyri-demo
 ```
 
-### Linux (apt / Ubuntu 24.04)
+## Editing conventions
 
-```bash
-# Install dependencies
-sudo apt update
-sudo apt install \
-  cmake ninja-build \
-  qt6-base-dev qt6-tools-dev qt6-opengl-dev \
-  libqt6pdf6-dev libqt6printsupport6 \
-  liblcms2-dev zlib1g-dev
+Space or middle mouse pans; Ctrl/Cmd + wheel and pinch zoom. B/N/E/G/I/M/V/P/T select brush, pencil, eraser, fill, picker, rectangle selection, move, pen, and text while the canvas has focus.
 
-# Configure + build
-cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-./build/Zyri
-```
+A drag is one undo step. Escape cancels gestures and pending background edits. Selections constrain raster edits; Shift adds, Alt subtracts, Shift+Alt intersects. Pen clicks add nodes, dragging makes curves, and Enter/right click finishes. The node tool moves nodes and handles; double click appends a node and Delete removes one. Double click text to edit its content.
 
-### Windows (MSVC + vcpkg)
+Painting requires an unlocked raster layer. Shape tools create a vector layer when needed. Rasterizing vector content is explicit and undoable. Save preserves an editable `.zyri` master; Export creates an interchange file.
 
-```powershell
-# Install Qt 6 via the Qt online installer or vcpkg, then:
-cmake -B build `
-  -DCMAKE_PREFIX_PATH="C:/Qt/6.x.x/msvc2022_64" `
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-.\build\Release\Zyri.exe
-```
+## Current limits
 
-> Windows support is a secondary target. Some platform-specific paths (macOS `BookmarkManager`, `MacOSAppearance`) are compiled out automatically.
+This is a development build with automated coverage, not a signed public release. The viewport currently uses CPU composition and a bounded tile cache; GPU presentation and the proposed performance targets are not claimed. History spill can pause under heavy memory pressure. Large move previews and clipboard rendering still perform work on the UI thread.
 
----
+Documents support dimensions up to 8192 per side, up to 64 Mi pixels, 256 layers, and a 512 MiB document-data budget. Working pixels are 8-bit sRGB. Untagged images are assumed sRGB. Text uses a single font/style per object and depends on installed fonts.
 
-## Running Tests
+SVG supports simple geometry and transforms. Complex supported-by-Qt content can be imported explicitly as a raster image; external/active resources are rejected. PDF import rasterizes selected pages. PDF/SVG export preserves representable vectors for normal layers and flattens blend-mode compositions to preserve appearance. SVG text interchange is basic; use native projects to preserve editable layout.
 
-```bash
-cmake --build build --target all
-cd build && ctest --output-on-failure
-```
+Windows/Linux CI configuration and macOS deployment/signing tooling are included. Physical tablet behavior, native desktop visual quality, distribution signing, clean-machine compatibility, and sustained performance still require release validation. No personal screen or accessibility interfaces were used in implementation or verification.
 
-Tests are organized by module:
+## Source and documentation
 
-```
-tests/
-  core/     — Document, LayerStack, BlendMode
-  engine/   — PaintEngine, FillEngine, DeltaCompressor
-  history/  — UndoStack, PaintTileCommand
-  io/       — ZyriFormat round-trip, PNGHandler
-```
+- [Implementation status](docs/implementation-status.md): architecture, evidence, limits, and remaining release gates.
+- [Build notes](docs/build.md): reproducible commands and dependencies.
+- [Verification record](docs/verification.md): observed test, bundle, and artifact checks.
+- [Original code audit](docs/code-audit.md): findings from baseline commit `5caa082`.
+- [Development plan](docs/implementation-plan.md), [architecture](docs/architecture.md), [tiles](docs/tile-system.md), and [history](docs/undo-design.md): design rationale and longer-term work.
+- [Original product brief](Instructions.md): historical context.
 
-Each test binary is independent (`QTEST_MAIN` per file) and run under ASan in Debug builds.
-
----
-
-## Project Structure
-
-```
-Zyri/
-├── CMakeLists.txt
-├── cmake/                    — find modules, compiler options, packaging helpers
-├── docs/                     — architecture, tile system, undo design
-├── packaging/
-│   ├── macos/                — Info.plist.in, entitlements, icon.icns
-│   ├── linux/                — .desktop file, AppImage config
-│   └── windows/              — WiX / NSIS installer
-├── resources/
-│   └── resources.qrc         — themes (dark/light .qss), icons, cursors
-├── src/
-│   ├── main.cpp
-│   ├── app/                  — Application, AppController, SessionManager (autosave)
-│   ├── canvas/               — QOpenGLWidget viewport, TileCache, GLCompositor, shaders
-│   ├── core/                 — Document, Layer hierarchy, ColorProfile (lcms2)
-│   ├── engine/
-│   │   ├── raster/           — PaintEngine, BrushStamp, FillEngine, SelectionMask
-│   │   └── vector/           — VectorScene, VectorObject, PathEditor, VectorRasterizer
-│   ├── history/              — UndoStack, DeltaCompressor, all Command types
-│   ├── io/                   — IOManager, ZyriFormat, PNG/JPEG/PDF/Clipboard handlers
-│   ├── platform/macos/       — BookmarkManager.mm, MacOSAppearance.mm
-│   ├── preferences/          — PreferencesStore, PreferencesDialog, KeyboardShortcuts
-│   ├── tools/                — ToolBase, ToolRegistry, all tool implementations
-│   └── ui/                   — MainWindow, panels, dialogs, toolbars, ThemeManager
-└── tests/
-```
-
----
-
-## File Format — `.zyri`
-
-Zyri's native format is a ZIP archive with the following layout:
-
-```
-document.zyri  (ZIP)
-├── manifest.json        — version, canvas size, DPI, layer order, blend modes
-├── thumbnail.png        — 256×256 preview
-├── colorprofile.icc     — embedded working color profile
-├── tiles/
-│   └── <layer-id>/
-│       └── <tx>_<ty>.bin    — zlib-compressed ARGB32 tile (256×256 = 256 KB raw)
-├── vectors/
-│   └── <layer-id>.json      — VectorObject array (path data, style)
-└── text/
-    └── <layer-id>.html      — TextLayer HTML content
-```
-
-Saves are atomic: data is written to a temporary file and renamed over the destination, so a crash during save never corrupts the previous version.
-
----
-
-## macOS Notes
-
-- **Minimum deployment target:** macOS 13 Ventura
-- **Bundle ID:** `com.zyri.app`
-- **Sandbox entitlements:** `com.apple.security.files.user-selected.read-write` + `com.apple.security.files.bookmarks.app-scope`
-- After signing, notarize with `xcrun notarytool` before distribution. See `packaging/macos/`.
-- Dark/light mode changes are detected at runtime via `NSDistributedNotificationCenter` (`AppleInterfaceThemeChangedNotification`).
-
----
-
-## Contributing
-
-The project is in active early development (Phase 0–1 complete). If you'd like to contribute, please open an issue first to discuss the change.
-
-**Code style:**
-- C++20, `[[nodiscard]]` on all query methods
-- Qt types for UI code, STL types for data structures (`std::vector`, `std::unique_ptr`)
-- No `QObject` inheritance on pure data classes (e.g., `Layer`, `ColorProfile`)
-- All I/O on worker threads via `QtConcurrent::run()`
-
----
+The current implementation lives in `src/editor`: Document, Session, ProjectIO, Canvas, and MainWindow. The old empty classes and disconnected engines have been removed.
 
 ## License
 
-TBD
+The project license remains unselected. Dependency license notices belong with distributed packages; the bundled-source libzip notice is retained in `third_party/licenses`.

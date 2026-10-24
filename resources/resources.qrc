@@ -1,15 +1,77 @@
 <RCC>
-    <qresource prefix="/themes">
-        <file alias="dark.qss">../src/ui/theme/themes/dark.qss</file>
-        <file alias="light.qss">../src/ui/theme/themes/light.qss</file>
-    </qresource>
-
-    <!-- Icons are added here as SVGs are created (Phase 4) -->
     <qresource prefix="/icons">
         <file alias="logo.png">../logo.png</file>
-    </qresource>
-
-    <!-- Cursors -->
-    <qresource prefix="/cursors">
+        <file alias="color-palette.svg">../svg/icon_svgs_0/color-palette.svg</file>
+        <file alias="color-reset.svg">../svg/icon_svgs_0/color-reset.svg</file>
+        <file alias="color-swap.svg">../svg/icon_svgs_0/color-swap.svg</file>
+        <file alias="color-wheel-alt.svg">../svg/icon_svgs_0/color-wheel-alt.svg</file>
+        <file alias="color-wheel.svg">../svg/icon_svgs_0/color-wheel.svg</file>
+        <file alias="doc-export.svg">../svg/icon_svgs_0/doc-export.svg</file>
+        <file alias="doc-new.svg">../svg/icon_svgs_0/doc-new.svg</file>
+        <file alias="doc-open.svg">../svg/icon_svgs_0/doc-open.svg</file>
+        <file alias="doc-save-disk.svg">../svg/icon_svgs_0/doc-save-disk.svg</file>
+        <file alias="doc-save-file.svg">../svg/icon_svgs_0/doc-save-file.svg</file>
+        <file alias="layer-add.svg">../svg/icon_svgs_0/layer-add.svg</file>
+        <file alias="layer-delete.svg">../svg/icon_svgs_0/layer-delete.svg</file>
+        <file alias="layer-duplicate.svg">../svg/icon_svgs_0/layer-duplicate.svg</file>
+        <file alias="layer-group.svg">../svg/icon_svgs_0/layer-group.svg</file>
+        <file alias="layer-hidden-eye-off.svg">../svg/icon_svgs_0/layer-hidden-eye-off.svg</file>
+        <file alias="layer-hidden-plus.svg">../svg/icon_svgs_0/layer-hidden-plus.svg</file>
+        <file alias="layer-hidden.svg">../svg/icon_svgs_0/layer-hidden.svg</file>
+        <file alias="layer-locked.svg">../svg/icon_svgs_0/layer-locked.svg</file>
+        <file alias="layer-merge.svg">../svg/icon_svgs_0/layer-merge.svg</file>
+        <file alias="layer-type-brush.svg">../svg/icon_svgs_0/layer-type-brush.svg</file>
+        <file alias="layer-type-raster.svg">../svg/icon_svgs_0/layer-type-raster.svg</file>
+        <file alias="layer-type-text.svg">../svg/icon_svgs_0/layer-type-text.svg</file>
+        <file alias="layer-type-vector.svg">../svg/icon_svgs_0/layer-type-vector.svg</file>
+        <file alias="layer-unlocked.svg">../svg/icon_svgs_0/layer-unlocked.svg</file>
+        <file alias="layer-visible-slash.svg">../svg/icon_svgs_0/layer-visible-slash.svg</file>
+        <file alias="layer-visible.svg">../svg/icon_svgs_0/layer-visible.svg</file>
+        <file alias="opt-align-center.svg">../svg/icon_svgs_0/opt-align-center.svg</file>
+        <file alias="opt-align-left.svg">../svg/icon_svgs_0/opt-align-left.svg</file>
+        <file alias="opt-align-right.svg">../svg/icon_svgs_0/opt-align-right.svg</file>
+        <file alias="opt-anti-alias.svg">../svg/icon_svgs_0/opt-anti-alias.svg</file>
+        <file alias="opt-brush-size.svg">../svg/icon_svgs_0/opt-brush-size.svg</file>
+        <file alias="opt-contiguous.svg">../svg/icon_svgs_0/opt-contiguous.svg</file>
+        <file alias="opt-ranti-alias.svg">../svg/icon_svgs_0/opt-ranti-alias.svg</file>
+        <file alias="opt-stroke-weight.svg">../svg/icon_svgs_0/opt-stroke-weight.svg</file>
+        <file alias="opt-text-bold-alt.svg">../svg/icon_svgs_0/opt-text-bold-alt.svg</file>
+        <file alias="opt-text-bold.svg">../svg/icon_svgs_0/opt-text-bold.svg</file>
+        <file alias="opt-text-italic.svg">../svg/icon_svgs_0/opt-text-italic.svg</file>
+        <file alias="opt-tolerance.svg">../svg/icon_svgs_0/opt-tolerance.svg</file>
+        <file alias="tool-brush.svg">../svg/icon_svgs_0/tool-brush.svg</file>
+        <file alias="tool-crop.svg">../svg/icon_svgs_0/tool-crop.svg</file>
+        <file alias="tool-ellipse-select.svg">../svg/icon_svgs_0/tool-ellipse-select.svg</file>
+        <file alias="tool-ellipse.svg">../svg/icon_svgs_0/tool-ellipse.svg</file>
+        <file alias="tool-eraser.svg">../svg/icon_svgs_0/tool-eraser.svg</file>
+        <file alias="tool-eyedropper.svg">../svg/icon_svgs_0/tool-eyedropper.svg</file>
+        <file alias="tool-fill.svg">../svg/icon_svgs_0/tool-fill.svg</file>
+        <file alias="tool-hand.svg">../svg/icon_svgs_0/tool-hand.svg</file>
+        <file alias="tool-lasso.svg">../svg/icon_svgs_0/tool-lasso.svg</file>
+        <file alias="tool-line.svg">../svg/icon_svgs_0/tool-line.svg</file>
+        <file alias="tool-magic-wand.svg">../svg/icon_svgs_0/tool-magic-wand.svg</file>
+        <file alias="tool-move-alt.svg">../svg/icon_svgs_0/tool-move-alt.svg</file>
+        <file alias="tool-move.svg">../svg/icon_svgs_0/tool-move.svg</file>
+        <file alias="tool-pencil.svg">../svg/icon_svgs_0/tool-pencil.svg</file>
+        <file alias="tool-polygon.svg">../svg/icon_svgs_0/tool-polygon.svg</file>
+        <file alias="tool-rect-select.svg">../svg/icon_svgs_0/tool-rect-select.svg</file>
+        <file alias="tool-rectangle.svg">../svg/icon_svgs_0/tool-rectangle.svg</file>
+        <file alias="tool-text.svg">../svg/icon_svgs_0/tool-text.svg</file>
+        <file alias="tool-transform.svg">../svg/icon_svgs_0/tool-transform.svg</file>
+        <file alias="tool-zoom.svg">../svg/icon_svgs_0/tool-zoom.svg</file>
+        <file alias="ui-close.svg">../svg/icon_svgs_0/ui-close.svg</file>
+        <file alias="ui-history-disabled.svg">../svg/icon_svgs_0/ui-history-disabled.svg</file>
+        <file alias="ui-history.svg">../svg/icon_svgs_0/ui-history.svg</file>
+        <file alias="ui-redo.svg">../svg/icon_svgs_0/ui-redo.svg</file>
+        <file alias="ui-rodo.svg">../svg/icon_svgs_0/ui-rodo.svg</file>
+        <file alias="ui-settings.svg">../svg/icon_svgs_0/ui-settings.svg</file>
+        <file alias="ui-theme-dark.svg">../svg/icon_svgs_0/ui-theme-dark.svg</file>
+        <file alias="ui-theme-light.svg">../svg/icon_svgs_0/ui-theme-light.svg</file>
+        <file alias="ui-undo.svg">../svg/icon_svgs_0/ui-undo.svg</file>
+        <file alias="vector-anchor-add.svg">../svg/icon_svgs_0/vector-anchor-add.svg</file>
+        <file alias="vector-anchor-del.svg">../svg/icon_svgs_0/vector-anchor-del.svg</file>
+        <file alias="vector-bring-front.svg">../svg/icon_svgs_0/vector-bring-front.svg</file>
+        <file alias="vector-path-close.svg">../svg/icon_svgs_0/vector-path-close.svg</file>
+        <file alias="vector-send-back.svg">../svg/icon_svgs_0/vector-send-back.svg</file>
     </qresource>
 </RCC>
