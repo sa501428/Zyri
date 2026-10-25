@@ -391,7 +391,7 @@ void Session::fill(QPoint seed, int tolerance, bool sampleVisible) {
     QImage sample =
         sampleVisible ? renderDocument(m_document).convertToFormat(QImage::Format_ARGB32) : image;
     QRgb target = sample.pixel(seed), color = foreground.rgba();
-    if (!sampleVisible && target == color)
+    if (!sampleVisible && tolerance == 0 && target == color)
         return;
     const int w = image.width(), h = image.height();
     QBitArray visited(w * h);

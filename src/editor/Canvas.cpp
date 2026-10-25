@@ -404,6 +404,9 @@ Object Canvas::makeObject() const {
 void Canvas::release(QPointF vp, Qt::KeyboardModifiers mods) {
     if (!m_drag)
         return;
+    // Release can carry a newer position than the last mouse/tablet move.
+    if (tool == Tool::Move || tool == Tool::Node)
+        move(vp, m_inputPressure, Qt::LeftButton);
     m_current = view.toDocument(vp, size());
     m_drag = false;
     if (tool == Tool::Brush || tool == Tool::Pencil || tool == Tool::Eraser) {

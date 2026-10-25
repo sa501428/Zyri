@@ -18,6 +18,7 @@
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QStatusBar>
+#include <QSvgRenderer>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolBar>
@@ -337,6 +338,108 @@ class TestEditor : public QObject {
         s.fill({0, 0}, 5);
         QCOMPARE(renderDocument(s.document()).pixelColor(1, 1), QColor(Qt::green));
     }
+    void fillMatchingSeedStillRecolorsNeighbors() {
+        auto d = blank({3, 1});
+        QImage image(d.size, QImage::Format_ARGB32_Premultiplied);
+        image.fill(QColor(250, 250, 250));
+        image.setPixelColor(1, 0, QColor(245, 245, 245));
+        image.setPixelColor(2, 0, Qt::black);
+        replaceRaster(d.layers[0], image);
+        const QImage before = renderDocument(d);
+        Session s(d);
+        s.foreground = QColor(250, 250, 250);
+        s.fill({0, 0}, 5);
+        QCOMPARE(renderDocument(s.document()).pixelColor(1, 0), s.foreground);
+        QCOMPARE(renderDocument(s.document()).pixelColor(2, 0), QColor(Qt::black));
+        s.undo();
+        QCOMPARE(renderDocument(s.document()), before);
+    }
+    void imageResolutionRoundTrip_data() {
+        QTest::addColumn<QString>("extension");
+        QTest::newRow("png") << QString("png");
+        QTest::newRow("jpeg") << QString("jpg");
+    }
+    void imageResolutionRoundTrip() {
+        QFETCH(QString, extension);
+        QTemporaryDir temp;
+        auto d = blank({32, 32});
+        d.ppi = 300;
+        auto path = temp.filePath("image." + extension);
+        QCOMPARE(exportImage(d, path), QString());
+        QImage disk(path);
+        QVERIFY(!disk.isNull());
+        QCOMPARE(qRound(disk.dotsPerMeterX() * .0254), 300);
+        QCOMPARE(qRound(disk.dotsPerMeterY() * .0254), 300);
+        auto loaded = importImage(path);
+        QVERIFY2(loaded, qPrintable(loaded.error));
+        QCOMPARE(loaded.document.ppi, 300);
+    }
+#ifdef ZYRI_PDF
+    void pdfImportKeepsRequestedResolution() {
+        QTemporaryDir temp;
+        auto d = blank({96, 96});
+        auto path = temp.filePath("image.pdf");
+        QCOMPARE(exportImage(d, path), QString());
+        auto loaded = importImage(path, 0, 300);
+        QVERIFY2(loaded, qPrintable(loaded.error));
+        QCOMPARE(loaded.document.ppi, 300);
+        QCOMPARE(loaded.document.size, QSize(300, 300));
+    }
+#endif
+    void svgFillRules_data() {
+        QTest::addColumn<bool>("winding");
+        QTest::newRow("odd-even") << false;
+        QTest::newRow("winding") << true;
+    }
+    void svgFillRules() {
+        QFETCH(bool, winding);
+        QTemporaryDir temp;
+        auto d = blank({100, 100});
+        d.layers[0].kind = LayerKind::Vector;
+        Object o;
+        o.kind = ObjectKind::Path;
+        o.fill = Qt::red;
+        o.stroke = Qt::transparent;
+        o.path.addRect(10, 10, 80, 80);
+        o.path.addRect(30, 30, 40, 40);
+        o.path.setFillRule(winding ? Qt::WindingFill : Qt::OddEvenFill);
+        d.layers[0].objects.push_back(o);
+        auto path = temp.filePath("image.svg");
+        QCOMPARE(exportSvg(d, path), QString());
+        QSvgRenderer renderer(path);
+        QVERIFY(renderer.isValid());
+        QImage image(d.size, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter p(&image);
+        renderer.render(&p);
+        p.end();
+        QCOMPARE(image.pixelColor(50, 50), renderDocument(d).pixelColor(50, 50));
+        auto loaded = importSvg(path);
+        QVERIFY2(loaded, qPrintable(loaded.error));
+        QVERIFY(loaded.warning.isEmpty());
+        QCOMPARE(renderDocument(loaded.document).pixelColor(50, 50), image.pixelColor(50, 50));
+    }
+    void svgInheritedFillRules() {
+        QTemporaryDir temp;
+        const auto path = temp.filePath("inherited.svg");
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\" "
+                   "fill-rule=\"evenodd\">"
+                   "<g><path d=\"M0 0h40v40h-40z M10 10h20v20h-20z\"/></g>"
+                   "<g fill-rule=\"nonzero\">"
+                   "<path d=\"M50 0h40v40h-40z M60 10h20v20h-20z\"/></g>"
+                   "<path fill-rule=\"inherit\" "
+                   "d=\"M0 50h40v40h-40z M10 60h20v20h-20z\"/></svg>");
+        file.close();
+        auto loaded = importSvg(path);
+        QVERIFY2(loaded, qPrintable(loaded.error));
+        QVERIFY(loaded.warning.isEmpty());
+        const auto image = renderDocument(loaded.document);
+        QCOMPARE(image.pixelColor(20, 20).alpha(), 0);
+        QCOMPARE(image.pixelColor(70, 20), QColor(Qt::black));
+        QCOMPARE(image.pixelColor(20, 70).alpha(), 0);
+    }
     void layerLifecycle() {
         Session s(blank());
         QUuid id = s.document().layers[0].id;
@@ -549,6 +652,34 @@ class TestEditor : public QObject {
         QVERIFY(!session.document().layers[0].tiles.isEmpty());
         session.undo();
         QVERIFY(session.document().layers[0].tiles.isEmpty());
+    }
+    void moveUsesReleasePosition_data() {
+        QTest::addColumn<bool>("intermediateMove");
+        QTest::newRow("release-only") << false;
+        QTest::newRow("after-move") << true;
+    }
+    void moveUsesReleasePosition() {
+        QFETCH(bool, intermediateMove);
+        Session s(blank({200, 200}));
+        Object o;
+        o.rect = {20, 20, 40, 40};
+        s.addObject(o);
+        Canvas canvas(&s);
+        canvas.resize(200, 200);
+        canvas.view.zoom = 1;
+        canvas.view.center = {100, 100};
+        canvas.setTool(Tool::Move);
+        QTest::mousePress(&canvas, Qt::LeftButton, {}, QPoint(40, 40));
+        if (intermediateMove) {
+            QMouseEvent move(QEvent::MouseMove, QPointF(50, 50), QPointF(50, 50),
+                             Qt::NoButton, Qt::LeftButton, {});
+            QApplication::sendEvent(&canvas, &move);
+        }
+        QTest::mouseRelease(&canvas, Qt::LeftButton, {}, QPoint(70, 80));
+        QVERIFY(s.object());
+        QCOMPARE(s.object()->transform.map(QPointF(20, 20)), QPointF(50, 60));
+        s.undo();
+        QCOMPARE(s.document().layers[1].objects[0].transform, QTransform());
     }
     void independentTabs() {
         QTemporaryDir temp;

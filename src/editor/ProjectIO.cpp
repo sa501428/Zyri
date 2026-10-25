@@ -393,12 +393,14 @@ LoadResult importImage(const QString& path, int page, int ppi) {
     if (QFileInfo(path).suffix().compare("svg", Qt::CaseInsensitive) == 0)
         return importSvg(path);
     QImage image;
+    int importedPpi = 96;
 #ifdef ZYRI_PDF
     if (QFileInfo(path).suffix().compare("pdf", Qt::CaseInsensitive) == 0) {
         QPdfDocument pdf;
         if (pdf.load(path) != QPdfDocument::Error::None || page < 0 || page >= pdf.pageCount())
             return {{}, QStringLiteral("Cannot open PDF page."), {}};
-        QSize size = (pdf.pagePointSize(page) * std::clamp(ppi, 36, 1200) / 72).toSize();
+        importedPpi = std::clamp(ppi, 36, 1200);
+        QSize size = (pdf.pagePointSize(page) * importedPpi / 72).toSize();
         if (!validSize(size))
             return {{}, QStringLiteral("PDF raster size exceeds limits."), {}};
         image = pdf.render(page, size);
@@ -413,6 +415,7 @@ LoadResult importImage(const QString& path, int page, int ppi) {
         image = reader.read();
         if (image.isNull())
             return {{}, reader.errorString(), {}};
+        importedPpi = std::clamp(qRound(image.dotsPerMeterX() * .0254), 1, 2400);
     }
     if (!validSize(image.size()))
         return {{}, QStringLiteral("Invalid imported image."), {}};
@@ -422,6 +425,7 @@ LoadResult importImage(const QString& path, int page, int ppi) {
         image.setColorSpace(QColorSpace::SRgb);
     Document d;
     d.size = image.size();
+    d.ppi = importedPpi;
     Layer l;
     l.name = QFileInfo(path).completeBaseName();
     replaceRaster(l, image);
@@ -488,6 +492,8 @@ QString exportImage(const Document& d, const QString& path, double scale, QColor
         p.drawImage(0, 0, image);
         p.end();
         flat.setColorSpace(QColorSpace::SRgb);
+        flat.setDotsPerMeterX(image.dotsPerMeterX());
+        flat.setDotsPerMeterY(image.dotsPerMeterY());
         image = flat;
     }
     QImageWriter writer(&file, ext == "png" ? "png" : "jpeg");
@@ -683,8 +689,11 @@ QString exportSvg(const Document& d, const QString& path) {
                         w.writeAttribute("font-family", o.font.family());
                         w.writeAttribute("font-size", QString::number(o.font.pointSizeF() * 4 / 3));
                         w.writeCharacters(o.text);
-                    } else
+                    } else {
+                        w.writeAttribute("fill-rule", o.geometry().fillRule() == Qt::OddEvenFill
+                                                          ? "evenodd" : "nonzero");
                         w.writeAttribute("d", pathData(o.geometry()));
+                    }
                     w.writeEndElement();
                 }
             w.writeEndElement();
@@ -727,17 +736,27 @@ LoadResult importSvg(const QString& path) {
         QXmlStreamReader xml(data);
         QVector<QTransform> transforms{QTransform()};
         QVector<double> opacities{1};
+        QVector<Qt::FillRule> fillRules{Qt::WindingFill};
         while (!xml.atEnd()) {
             xml.readNext();
             if (xml.isEndElement() && xml.name() == "g") {
                 require(transforms.size() > 1, QStringLiteral("Invalid SVG group."));
                 transforms.pop_back();
                 opacities.pop_back();
+                fillRules.pop_back();
             }
             if (!xml.isStartElement())
                 continue;
             QString tag = xml.name().toString();
             auto a = xml.attributes();
+            auto fillRule = [&] {
+                const auto rule = a.value("fill-rule");
+                if (rule.isEmpty() || rule == "inherit")
+                    return fillRules.back();
+                require(rule == "nonzero" || rule == "evenodd",
+                        QStringLiteral("Unsupported SVG fill rule."));
+                return rule == "evenodd" ? Qt::OddEvenFill : Qt::WindingFill;
+            };
             auto value = [&](const char* name, double fallback = 0) {
                 if (!a.hasAttribute(QLatin1String(name)))
                     return fallback;
@@ -750,6 +769,7 @@ LoadResult importSvg(const QString& path) {
                 return n;
             };
             if (tag == "svg") {
+                fillRules[0] = fillRule();
                 d.size = QSize(qRound(value("width", 512)), qRound(value("height", 512)));
                 require(validSize(d.size), QStringLiteral("SVG dimensions exceed limits."));
                 if (a.hasAttribute("viewBox")) {
@@ -774,6 +794,7 @@ LoadResult importSvg(const QString& path) {
                         QStringLiteral("Inherited SVG styles require raster import."));
                 transforms << readTransform(a.value("transform").toString()) * transforms.back();
                 opacities << std::clamp(value("opacity", 1), 0., 1.) * opacities.back();
+                fillRules << fillRule();
                 continue;
             }
             require(!a.hasAttribute("style") && !a.hasAttribute("class"),
@@ -856,6 +877,7 @@ LoadResult importSvg(const QString& path) {
                         QStringLiteral("Complex SVG text requires raster import."));
             } else
                 throw Failure{QStringLiteral("Unsupported SVG element: ") + tag};
+            o.path.setFillRule(fillRule());
             if (d.layers.empty() || d.layers.back().kind != LayerKind::Vector) {
                 Layer l;
                 l.kind = LayerKind::Vector;
